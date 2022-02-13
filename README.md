@@ -1,2 +1,2 @@
 # bit-parser
-Simple parser of bit fields. 
+Simple bitmap parser.
