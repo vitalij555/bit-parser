@@ -20,3 +20,5 @@ class TestExample:
     def test_ok(self):
         assert 0 == 0
 
+    def test_ok2(self):
+        assert 0 == 0
