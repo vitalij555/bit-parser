@@ -17,6 +17,6 @@ class TestExample:
     # def tearDownClass():
     #     print("Wow teardown called...")
 
-    def test_ok(self, subscriber):
+    def test_ok(self):
         assert 0 == 0
 
