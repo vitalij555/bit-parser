@@ -9,7 +9,6 @@ if not '../bit-parser' in sys.path:
 # from BitParser.SubscriberManager import SubscriberManager
 
 
-
 class TestExample:
     # def setUpClass():
     #     print("Wow called")
