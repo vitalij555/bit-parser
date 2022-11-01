@@ -44,7 +44,7 @@ jobs:
     - uses: actions/upload-artifact@v2
       with:
         name: htmlcov
-        path: '/home/runner/work/event-notifier/**/*htmlcov*'
+        path: '/home/runner/work/bit-parser/**/*htmlcov*'
     - name: Build and publish
       env:
         TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
