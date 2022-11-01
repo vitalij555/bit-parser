@@ -147,28 +147,3 @@ def parseBits(bytesStr: str, descriptors: list) -> str:
     return results
 
 
-
-if __name__ == "__main__":
-    parser = MultiBitValueParser({"00000000": "zero-zero", "00000001": "zero-one", "00000010": "one-zero", "00000011": "one-one"}, SameValueRange(0b0100, 0b11100, 8, "RFU"), SameValueRange(0b10000000, 0b11111111, 8, "RFU2"))
-
-    Some_Descriptors = [
-        parser,
-        parser,
-        parser,
-        parser,
-        parser,
-        parser,
-        parser,
-        parser
-    ]
-
-
-    def create_Some_Parser():
-        def some_parser(bytes_to_parse):
-            return parseBits(bytes_to_parse, Some_Descriptors)
-        return some_parser
-
-
-    some_parser = create_Some_Parser()
-    print(some_parser("11"))
-    print(some_parser("01"))

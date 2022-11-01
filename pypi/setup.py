@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 setup(
   name = 'bit-parser',         # How you named your package folder (MyLib)
   packages=setuptools.find_packages(),
-  version = '0.0.9',
+  version = '0.0.10',
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Parse binary data fields (bit maps, flag sets) represented as hex strings (helpful for parsing separate protocol elements found in trace files for example)',   # Give a short description about your library
   long_description=long_description,
