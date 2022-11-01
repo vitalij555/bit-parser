@@ -40,7 +40,7 @@ jobs:
     - uses: actions/upload-artifact@v2
       with:
         name: coverage.xml
-        path: /home/runner/work/bit-parser/bit-parser/test/coverage.xml
+        path: /home/runner/work/bit-parser/bit-parser/coverage.xml
     - uses: actions/upload-artifact@v2
       with:
         name: htmlcov
