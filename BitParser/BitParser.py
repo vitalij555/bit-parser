@@ -15,7 +15,7 @@ class Dict_Returning_Key_With_Value(MutableMapping):
         if not self.__return_int_value_instead_of_name:
             return self.store[key]
         else:
-            return self.store[key] + ": " + key
+            return self.store[key] + ": " + str(int(key, 2))
 
     def __setitem__(self, key, value):
         self.store[key] = value
