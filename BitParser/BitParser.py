@@ -106,7 +106,7 @@ def pairwise(iterable):
     return zip(a, a)
 
 
-def parseBits(bytesStr: str, descriptors: list) -> str:
+def parse_bits(bytesStr: str, descriptors: list) -> str:
     bytesStr = bytesStr.strip()
     bytesStr = bytesStr.replace("  ", " ")
     bytesStr = bytesStr.replace(" ", "")

@@ -6,7 +6,7 @@ import sys
 if not '../bit-parser' in sys.path:
     sys.path.insert(1, '../bit-parser')
 
-from BitParser.BitParser import MultiBitValueParser, parseBits, SameValueRange
+from BitParser.BitParser import MultiBitValueParser, parse_bits, SameValueRange
 
 
 @pytest.fixture(scope="class")  # scope="function" is default
@@ -32,7 +32,7 @@ def simple_one_byte_parser():
                                                   "I/O pin Nr0 high level"]
 
     def one_byte_parser(bytes_to_parse):
-        return parseBits(bytes_to_parse, simple_one_byte_protocol_bit_descriptions)
+        return parse_bits(bytes_to_parse, simple_one_byte_protocol_bit_descriptions)
     return one_byte_parser
 
 
@@ -68,7 +68,7 @@ def simple_three_byte_parser():
                              "flood sensor active"  # bit 0: 00000001
     ]
     def three_byte_simple_parser(bytes_to_parse):
-        return parseBits(bytes_to_parse, three_byte_protocol)
+        return parse_bits(bytes_to_parse, three_byte_protocol)
     return three_byte_simple_parser
 
 
@@ -141,7 +141,7 @@ def multibyte_protocol_with_counter():
 
     ]
     def protocol_with_counter_parser(bytes_to_parse):
-        return parseBits(bytes_to_parse, protocol_with_counter)
+        return parse_bits(bytes_to_parse, protocol_with_counter)
     return protocol_with_counter_parser
 
 
@@ -227,7 +227,7 @@ def advanced_multibyte_protocol_parser():
                              "RFU",                 # bit 0: 00000001
                           ]
     def advanced_protocol_parser(bytes_to_parse):
-        return parseBits(bytes_to_parse, advanced_protocol)
+        return parse_bits(bytes_to_parse, advanced_protocol)
     return advanced_protocol_parser
 
 
