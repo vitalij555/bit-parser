@@ -180,11 +180,9 @@ def advanced_multibyte_protocol_parser():
     # "temperature status",   # bit 4: 00010000
     # "temperature status",   # bit 3: 00001000
     # "LED is ON",            # bit 2: 00000100
-    # "heating mode",         # bit 1: 00000010
-    # "heating mode",         # bit 0: 00000001
+    # "heating mode",         # bits 0-1: 000000xx
     # # Byte 1:
-    # "heating mode",         # bit 7: 10000000
-    # "heating mode",         # bit 6: 01000000
+    # "heating mode",         # bit 6-7: xx000000
     # "heating module 1 on",  # bit 5: 00100000
     # "heating module 2 on",  # bit 4: 00010000
     # "heating module 3 on",  # bit 3: 00001000
@@ -192,20 +190,35 @@ def advanced_multibyte_protocol_parser():
     # "RFU",                  # bit 1: 00000010
     # "RFU",                  # bit 0: 00000001
 
+    heating_mode = MultiBitValueParser({ "0000": "heating mode off",
+                                         "0001": "heating mode 1",
+                                         "0010": "heating mode 2",
+                                         "0011": "heating mode 3",
+                                         "0100": "heating mode 4",
+                                         "0101": "heating mode 5",
+                                         "0110": "heating mode 6",
+                                         "0111": "heating mode 7",
+                                         "1000": "heating mode 8"},
+                                         SameValueRange(0b1001, 0b1111, 4, "RFU"))
+
+    status = MultiBitValueParser({  "00": "temperature OK",
+                                    "01": "temperature too low",
+                                    "10": "temperature too high",
+                                    "11": "broken sensor"})
 
     advanced_protocol = [
                             # Byte 0:
                              "sensor ID",           # bit 7: 10000000
                              "sensor ID",           # bit 6: 01000000
                              "sensor ID",           # bit 5: 00100000
-                             "temperature status",  # bit 4: 00010000
-                             "temperature status",  # bit 3: 00001000
+                             status,                # bit 4: 00010000
+                             status,                # bit 3: 00001000
                              "LED is ON",           # bit 2: 00000100
-                             "heating mode",        # bit 1: 00000010
-                             "heating mode",        # bit 0: 00000001
+                             heating_mode,          # bit 1: 00000010
+                             heating_mode,          # bit 0: 00000001
                             # Byte 1:
-                             "heating mode",        # bit 7: 10000000
-                             "heating mode",        # bit 6: 01000000
+                             heating_mode,          # bit 7: 10000000
+                             heating_mode,          # bit 6: 01000000
                              "heating module 1 on", # bit 5: 00100000
                              "heating module 2 on", # bit 4: 00010000
                              "heating module 3 on", # bit 3: 00001000
@@ -308,6 +321,43 @@ class TestBitParser:
         parsed = multibyte_protocol_with_counter("000028")
         print(parsed)
         expected = ['Number of people in the building: 10']
+        assert len(parsed) == len(expected)
+        print(all([a == b for a, b in zip(parsed, expected)]))
+        assert all([a == b for a, b in zip(parsed, expected)])
+
+
+    # # Byte 0:
+    # "sensor ID",            # bit 7: 10000000
+    # "sensor ID",            # bit 6: 01000000
+    # "sensor ID",            # bit 5: 00100000
+    # "temperature status",   # bit 4: 00010000
+    # "temperature status",   # bit 3: 00001000
+    # "LED is ON",            # bit 2: 00000100
+    # "heating mode",         # bits 0-1: 000000xx
+    # # Byte 1:
+    # "heating mode",         # bit 6-7: xx000000
+    # "heating module 1 on",  # bit 5: 00100000
+    # "heating module 2 on",  # bit 4: 00010000
+    # "heating module 3 on",  # bit 3: 00001000
+    # "heating module 4 on",  # bit 2: 00000100
+    # "RFU",                  # bit 1: 00000010
+    # "RFU",                  # bit 0: 00000001
+
+
+    def test_advanced_protocol_08F0(self, advanced_multibyte_protocol_parser):
+        parsed = advanced_multibyte_protocol_parser("08F0")
+        expected = [ 'temperature too low',
+                     'heating mode 3',
+                     'heating module 1 on',
+                     'heating module 2 on']
+        assert len(parsed) == len(expected)
+        print(all([a == b for a, b in zip(parsed, expected)]))
+        assert all([a == b for a, b in zip(parsed, expected)])
+
+
+    def test_advanced_protocol_0000(self, advanced_multibyte_protocol_parser):
+        parsed = advanced_multibyte_protocol_parser("0000")
+        expected = ['temperature OK', 'heating mode off']
         assert len(parsed) == len(expected)
         print(all([a == b for a, b in zip(parsed, expected)]))
         assert all([a == b for a, b in zip(parsed, expected)])
