@@ -132,9 +132,9 @@ Heating mode (4 bits):
 ```  
 
 From above description we can make conclusion that in this particular case we have 4 different sutuations to handle:
-1. Bits like Byte1.bit2-bit5 ("heating module N on") or Byte1.bit1 ("RFU") represent one something on their own (the simplest case we had in the first example above)
+1. Bits like Byte1.bit2-bit5 ("heating module N on") or Byte1.bit1 ("RFU") represent something on their own (as in the simplest case we had in the first example above)
 2. Byte0.bit5-bit7 represent device ID which means we are interested in a value itself (1,2,3,4,5..) and not in a label ("device id") here, because label will be able to tell only that device "has some id assigned" - which we already know anyway.
-3. Byte0.bit0,bit1-Byte1.bit6,bit7 encode heating mode. Although it would be not too smart to organise these four bits in a way it is shown in our example (bit pairs located in a different bytes), let's assume we got it "as is" and there is no chance to change this protocol. Shortly we will ensure that bit-parser is able to handle even such cases without a problem. Also note we have codes from 9 to 15 "Reserved for Future Use. This situation is also quite common in embedded world when we whant to leave some space for future improvements (or vice versa - sometimes empty spaces in a protocol might appear after we improve something)
+3. Byte0.bit0,bit1-Byte1.bit6,bit7 encode heating mode. Although it would be not too smart to organise these four bits in a way it is shown in our example (bit pairs located in a different bytes), let's assume we got it "as is" and there is no chance to change this protocol. Shortly we will ensure that bit-parser is able to handle even cases like this without a problem. Also note, we have codes from 9 to 15 "Reserved for Future Use. This situation is also quite common in embedded world when we whant to leave some space for future improvements (or vice versa - sometimes empty spaces in a protocol might appear after we improve something)
 4. Byte0.bit2 ("LED is ON") in general looks the same as a bit representing one "thing" (case described in bullet 1). The difference here is that compared to simple case we are interested not only in getting to know when LED is ON, but also to know if LED is OFF. In other words, there should be always a line amongst our parsed lines saying whether LED is ON or OFF. 
            
 Now having all these peculiarities in mind, let's define our parser for these two bytes:
@@ -196,7 +196,7 @@ def create_advanced_protocol_parser():
       return parse_bits(bytes_to_parse, advanced_protocol)
   return advanced_protocol_parser
 
-advanced_parser = create_advanced_protocol_parser
+advanced_parser = create_advanced_protocol_parser()
 
 pprint(advanced_parser("44 F0")) # spaces are allowed but are not mandatory
 ```
