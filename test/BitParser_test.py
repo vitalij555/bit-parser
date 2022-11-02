@@ -76,32 +76,32 @@ def simple_three_byte_parser():
 def multibyte_protocol_with_counter():
     """
     # Byte 0:
-     "front door opened",   # bit 7: 10000000
-     "back door opened",    # bit 6: 01000000
-     "zone 1 alarm",        # bit 5: 00100000
-     "zone 2 alarm",        # bit 4: 00010000
-     "zone 3 alarm",        # bit 3: 00001000
-     "zone 4 alarm",        # bit 2: 00000100
-     "zone 5 alarm",        # bit 1: 00000010
-     "zone 6 alarm",        # bit 0: 00000001
+     "front door opened",     # bit 7: 10000000
+     "back door opened",      # bit 6: 01000000
+     "zone 1 alarm",          # bit 5: 00100000
+     "zone 2 alarm",          # bit 4: 00010000
+     "zone 3 alarm",          # bit 3: 00001000
+     "zone 4 alarm",          # bit 2: 00000100
+     "zone 5 alarm",          # bit 1: 00000010
+     "zone 6 alarm",          # bit 0: 00000001
     # Byte 1:
-     "zone 7 alarm",        # bit 7: 10000000
-     "zone 1 fire",         # bit 6: 01000000
-     "zone 2 fire",         # bit 5: 00100000
-     "zone 3 fire",         # bit 4: 00010000
-     "zone 4 fire",         # bit 3: 00001000
-     "zone 5 fire",         # bit 2: 00000100
+     "zone 7 alarm",          # bit 7: 10000000
+     "zone 1 fire",           # bit 6: 01000000
+     "zone 2 fire",           # bit 5: 00100000
+     "zone 3 fire",           # bit 4: 00010000
+     "zone 4 fire",           # bit 3: 00001000
+     "zone 5 fire",           # bit 2: 00000100
      "flood sensor 1 alarm",  # bit 1: 00000010
      "flood sensor 2 alarm",  # bit 0: 00000001
     # Byte 2:
-     "RFU",                 # bit 7: 10000000
-     "RFU",                 # bit 6: 01000000
+     "RFU",                   # bit 7: 10000000
+     "RFU",                   # bit 6: 01000000
      "Number of people in the building",   # bit 5: 00100000
      "Number of people in the building",   # bit 4: 00010000
      "Number of people in the building",   # bit 3: 00001000
      "Number of people in the building",   # bit 2: 00000100
-     "RFU",                 # bit 1: 00000010
-     "RFU",                 # bit 0: 00000001"""
+     "RFU",                   # bit 1: 00000010
+     "RFU",                   # bit 0: 00000001"""
 
 
     people_counter = MultiBitValueParser(SameValueRange(  0b0000,
@@ -206,14 +206,19 @@ def advanced_multibyte_protocol_parser():
                                     "10": "temperature too high",
                                     "11": "broken sensor"})
 
+    led_status = MultiBitValueParser({"0": "LED is OFF",
+                                      "1": "LED is ON"})
+
+    sensor_id = MultiBitValueParser(SameValueRange(0b000, 0b111, 3, "sensor ID", return_value_instead_of_name=True))
+
     advanced_protocol = [
                             # Byte 0:
-                             "sensor ID",           # bit 7: 10000000
-                             "sensor ID",           # bit 6: 01000000
-                             "sensor ID",           # bit 5: 00100000
+                             sensor_id,             # bit 7: 10000000
+                             sensor_id,             # bit 6: 01000000
+                             sensor_id,             # bit 5: 00100000
                              status,                # bit 4: 00010000
                              status,                # bit 3: 00001000
-                             "LED is ON",           # bit 2: 00000100
+                             led_status,            # bit 2: 00000100
                              heating_mode,          # bit 1: 00000010
                              heating_mode,          # bit 0: 00000001
                             # Byte 1:
@@ -326,27 +331,23 @@ class TestBitParser:
         assert all([a == b for a, b in zip(parsed, expected)])
 
 
-    # # Byte 0:
-    # "sensor ID",            # bit 7: 10000000
-    # "sensor ID",            # bit 6: 01000000
-    # "sensor ID",            # bit 5: 00100000
-    # "temperature status",   # bit 4: 00010000
-    # "temperature status",   # bit 3: 00001000
-    # "LED is ON",            # bit 2: 00000100
-    # "heating mode",         # bits 0-1: 000000xx
-    # # Byte 1:
-    # "heating mode",         # bit 6-7: xx000000
-    # "heating module 1 on",  # bit 5: 00100000
-    # "heating module 2 on",  # bit 4: 00010000
-    # "heating module 3 on",  # bit 3: 00001000
-    # "heating module 4 on",  # bit 2: 00000100
-    # "RFU",                  # bit 1: 00000010
-    # "RFU",                  # bit 0: 00000001
+    def test_advanced_protocol_48F0(self, advanced_multibyte_protocol_parser):
+        parsed = advanced_multibyte_protocol_parser("48F0")
+        expected = [ 'sensor ID: 2',
+                     'temperature too low',
+                     'LED is OFF',
+                     'heating mode 3',
+                     'heating module 1 on',
+                     'heating module 2 on']
+        assert len(parsed) == len(expected)
+        print(all([a == b for a, b in zip(parsed, expected)]))
+        assert all([a == b for a, b in zip(parsed, expected)])
 
-
-    def test_advanced_protocol_08F0(self, advanced_multibyte_protocol_parser):
-        parsed = advanced_multibyte_protocol_parser("08F0")
-        expected = [ 'temperature too low',
+    def test_advanced_protocol_led_is_on(self, advanced_multibyte_protocol_parser):
+        parsed = advanced_multibyte_protocol_parser("0CF0")
+        expected = [ 'sensor ID: 0',
+                     'temperature too low',
+                     'LED is ON',
                      'heating mode 3',
                      'heating module 1 on',
                      'heating module 2 on']
@@ -357,7 +358,10 @@ class TestBitParser:
 
     def test_advanced_protocol_0000(self, advanced_multibyte_protocol_parser):
         parsed = advanced_multibyte_protocol_parser("0000")
-        expected = ['temperature OK', 'heating mode off']
+        expected = ['sensor ID: 0',
+                    'temperature OK',
+                    'LED is OFF',
+                    'heating mode off']
         assert len(parsed) == len(expected)
         print(all([a == b for a, b in zip(parsed, expected)]))
         assert all([a == b for a, b in zip(parsed, expected)])

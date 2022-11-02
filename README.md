@@ -14,9 +14,10 @@ Currently, bit-parser is only able to parse binary data provided in a form of he
 ## Contents
 
 - [Motivation](#motivation)
+- [Usage](#usage)
+  - [Simple example](#simple-example)
+  - [Advanced example](#advanced-example)
 - [Installation](#installation)
-- [Example](#example)
-- [Constructor](#constructor)
 - [API Overview](#api-overview)
 - [Tests](#tests)
 - [License](#license)
@@ -25,9 +26,19 @@ Currently, bit-parser is only able to parse binary data provided in a form of he
 
 ## Motivation
 
-Let's imagine we are working in an IoT area and for current project we need to deal with some very simple protocol: controller sends command to one of its peripherals and gets back status of its I/O pins. As a result of such a request we get several bytes of a response, one byte of which encodes situation on I/O pins. There "1" means high voltage level on CPU pin and "0" means low. We can describe our byte of interest as follows:
+In software development it's quite often happens that developer needs to deal with different data represented in formats not easily readable for human. Usually microcontrollers used in IoT or other embedded systems, usually, does not have enough resources to output "novels" into their log files describing what just happened in the system. As a result, most of such log files contain a lot of hexadecimal numbers representing statuses, error codes, counters, levels and many more.
+
+Because of that it is always worth to write additional tooling allowing fast and error-prone reading of such files.
+
+bit-parser can definetely serve here as a corner-stone component for implementing such tooling.
+
+## Usage
+
+### Simple example 
+Let's start from something simple. Let's imagine in our current IoT project we need to deal with some very simple protocol: controller sends command to one of its peripherals and gets back status of its I/O pins. As a result of such a request we get several bytes of a response, one byte of which encodes situation on I/O pins. There "1" means high voltage level on CPU pin and "0" means low. We can describe our byte of interest as follows:
 
 ```text
+# Byte 0:
     Bit 7: I/O pin Nr7 high level
     Bit 6: I/O pin Nr6 high level
     Bit 5: I/O pin Nr5 high level
@@ -42,6 +53,10 @@ Controller then writes request and response pair into a log file (or console). A
 Here is how we can do that with a help of bit-parser:
 
 ```python
+# 0. Import parse_bits function
+from BitParser import parse_bits
+from pprint import pprint
+
 # 1. First we describe bits as python list:
 bits_meaning = [ "I/O pin Nr7 high level",
                  "I/O pin Nr6 high level",
@@ -53,10 +68,161 @@ bits_meaning = [ "I/O pin Nr7 high level",
                  "I/O pin Nr0 high level",]
 
 # 2. Just parse..
-print(parseBits("A3", bits_meaning))
-
+pprint(parse_bits("A3", bits_meaning))
+```
+Console output:
+```console
+['I/O pin Nr7 high level',
+ 'I/O pin Nr5 high level',
+ 'I/O pin Nr1 high level',
+ 'I/O pin Nr0 high level']
 ```
 
+### Advanced example
+
+Although it's not a rare case when one bit represents one "thing" in a byte, most of the time information is packed into a bytes in a more efficient way. For example, it is quite often to have situation when part of a byte (some of its bits located one after another) is dedicated to encode some number or a code. For example, we can say that bits 2-4 in a byte 2 are representing some status code. Now, instead of being able to encode only 3 different statuses with 3 bits we are able to encode 8 different statuses (000, 001, 010, .. 111). At the same time other bits in a byte can still represent only one "thing" per bit.
+
+Having that in mind, let's consider more sophisticatyed case. 
+
+Imagine we have a thermostat controller and the main module. Main manages temperature controller by sending it commands and obtaining back responses. For example, one of the responses could be represented by two bytes like following:
+
+```
+# Byte 0:
+ "sensor ID",            | bit 7:    10000000
+ "sensor ID",            | bit 6:    01000000
+ "sensor ID",            | bit 5:    00100000
+ "temperature status",   | bit 4:    00010000
+ "temperature status",   | bit 3:    00001000
+ "LED is ON",            | bit 2:    00000100
+ "heating mode",         | bits 0-1: 000000xx
+# Byte 1:                |
+ "heating mode",         | bits 6-7: xx000000
+ "heating module 1 on",  | bit 5:    00100000
+ "heating module 2 on",  | bit 4:    00010000
+ "heating module 3 on",  | bit 3:    00001000
+ "heating module 4 on",  | bit 2:    00000100
+ "RFU",                  | bit 1:    00000010
+ "RFU",                  | bit 0:    00000001
+
+Where
+sensor ID - 3 bits representing device ID (meaning we can handle only 8 devices max in the system)
+Temperature status (2 bits) can have following values:
+    "00" - temperature OK
+    "01" - temperature too low
+    "10" - temperature too high
+    "11" - broken sensor
+
+Heating mode (4 bits):
+     0 - 0000 - mode off
+     1 - 0001 - mode 1
+     2 - 0010 - mode 2
+     3 - 0011 - mode 3
+     4 - 0100 - mode 4
+     5 - 0101 - mode 5
+     6 - 0110 - mode 6
+     7 - 0111 - mode 7
+     8 - 1000 - mode 8
+     9 - 1001 - RFU
+    10 - 1010 - RFU
+    11 - 1011 - RFU
+    12 - 1100 - RFU
+    13 - 1101 - RFU
+    14 - 1110 - RFU
+    15 - 1111 - RFU        
+```  
+
+From above description we can make conclusion that in this particular case we have 4 different sutuations to handle:
+1. Bits like Byte1.bit2-bit5 ("heating module N on") or Byte1.bit1 ("RFU") represent one something on their own (the simplest case we had in the first example above)
+2. Byte0.bit5-bit7 represent device ID which means we are interested in a value itself (1,2,3,4,5..) and not in a label ("device id") here, because label will be able to tell only that device "has some id assigned" - which we already know anyway.
+3. Byte0.bit0,bit1-Byte1.bit6,bit7 encode heating mode. Although it would be not too smart to organise these four bits in a way it is shown in our example (bit pairs located in a different bytes), let's assume we got it "as is" and there is no chance to change this protocol. Shortly we will ensure that bit-parser is able to handle even such cases without a problem. Also note we have codes from 9 to 15 "Reserved for Future Use. This situation is also quite common in embedded world when we whant to leave some space for future improvements (or vice versa - sometimes empty spaces in a protocol might appear after we improve something)
+4. Byte0.bit2 ("LED is ON") in general looks the same as a bit representing one "thing" (case described in bullet 1). The difference here is that compared to simple case we are interested not only in getting to know when LED is ON, but also to know if LED is OFF. In other words, there should be always a line amongst our parsed lines saying whether LED is ON or OFF. 
+           
+Now having all these peculiarities in mind, let's define our parser for these two bytes:
+
+```python
+from BitParser import parse_bits, MultiBitValueParser, SameValueRange
+from pprint import pprint
+
+# describing sensor_id 
+sensor_id = MultiBitValueParser(SameValueRange(0b000, 0b111, 3, "sensor ID", return_value_instead_of_name=True))
+
+
+# describing Heating Mode
+heating_mode = MultiBitValueParser({ "0000": "heating mode off",
+                                     "0001": "heating mode 1",
+                                     "0010": "heating mode 2",
+                                     "0011": "heating mode 3",
+                                     "0100": "heating mode 4",  # important to describe full range here and not leave 
+                                     "0101": "heating mode 5",
+                                     "0110": "heating mode 6",
+                                     "0111": "heating mode 7",
+                                     "1000": "heating mode 8"},  # here dictionary ends. We can have unlimited number of dictionaries or SameValueRange objects separated by comas inside MultiBitValueParser constructor.
+                                     SameValueRange(0b1001, 0b1111, 4, "RFU"))  # in this way we can define the whole range having same values
+
+# describing Status
+status = MultiBitValueParser({  "00": "temperature OK",
+                                "01": "temperature too low",
+                                "10": "temperature too high",
+                                "11": "broken sensor"})
+
+# LED ON/OFF
+led_status = MultiBitValueParser({ "0": "LED is OFF",
+                                   "1": "LED is ON"})
+
+# bringing all together
+advanced_protocol = [
+                        # Byte 0:
+                         sensor_id,             # bit 7: 10000000   
+                         sensor_id,             # bit 6: 01000000
+                         sensor_id,             # bit 5: 00100000
+                         status,                # bit 4: 00010000
+                         status,                # bit 3: 00001000
+                         led_status,            # bit 2: 00000100
+                         heating_mode,          # bit 1: 00000010
+                         heating_mode,          # bit 0: 00000001
+                        # Byte 1:
+                         heating_mode,          # bit 7: 10000000
+                         heating_mode,          # bit 6: 01000000
+                         "heating module 1 on", # bit 5: 00100000
+                         "heating module 2 on", # bit 4: 00010000
+                         "heating module 3 on", # bit 3: 00001000
+                         "heating module 4 on", # bit 2: 00000100
+                         "RFU",                 # bit 1: 00000010
+                         "RFU",                 # bit 0: 00000001
+                      ]
+
+def create_advanced_protocol_parser():
+  def advanced_protocol_parser(bytes_to_parse):
+      return parse_bits(bytes_to_parse, advanced_protocol)
+  return advanced_protocol_parser
+
+advanced_parser = create_advanced_protocol_parser
+
+pprint(advanced_parser("44 F0")) # spaces are allowed but are not mandatory
+```
+Output:
+```console
+['sensor ID: 2',
+ 'temperature OK',
+ 'LED is ON',
+ 'heating mode 3',
+ 'heating module 1 on',
+ 'heating module 2 on']
+```
+Let's try to switch LED ON...
+```
+pprint(advanced_parser("4C F0"))
+```
+Output:
+```console
+['sensor ID: 2',
+ 'temperature too low',
+ 'LED is ON',
+ 'heating mode 3',
+ 'heating module 1 on',
+ 'heating module 2 on']
+
+```
 
 ## Installation
 
@@ -65,233 +231,9 @@ pip install -U bit-parser
 ```
 
 
-## Example
-
-```python
-
-```
-
-
-
-## Constructor
-
-```python
-
-```
-
-
-**Parameters**
-
-- `eventNames` - `list of any` - mandatory, provides list of all supported events. Values provided here can be used for raising events later.
- Values provided in this list can be of any type.
-- `logger` - `object` - optional, logger supporting standard logging methods (info, warning error, etc..), default: `None`. 
-If None is provided, then internal logger outputting warnings and errors to console will be created.
-
-
-
-**Example**
-
-Any object can be used as event name. Example below illustrates that:
-
-```python
-```
-
-
 ## API Overview
 
-
-### subscribe(eventName, subscriber) 
-
-**Description**
-
-
-**Parameters**
-
-- `eventName` - `any` - mandatory, specifies name of the event, subscriber will be interested in.
-- `subscriber` - `any` - mandatory, callable subscriber (function, class method or class with __call__ implemented)
-
-**Example**
-
-```python
-```
-
-
-### subscribe_to_all(subscriber):
-
-**Description**
-
-Method allows to register one callable for all events supported by notifier.
-
-
-**Parameters**
-
-- `subscriber` - `callable` - mandatory, will be called when event rises.
-
-**Example**
-
-```python
-
-```
-
-Console output:
-
-```console
-Event onCreate at path some\path\here is called with following simple args: ['onCreate'] and with following keyword args: {'fileName': 'test_file.txt'}
-Event onOpen at path some\path\here is called with following simple args: ['onOpen'] and with following keyword args: {'openMode': 'w+', 'fileName': 'test_file.txt'}
-```
-
-
-### get_registered_events():
-
-**Description**
-
-Returns all supported events as a list.
-
-**Example**
-
-```python
-from EventNotifier import Notifier
-notifier = Notifier(["onCreate", "onOpen", "onModify", "onClose", "onDelete"])
-print(notifier.get_registered_events())
-```
-will output:
-```console
-['onCreate', 'onOpen', 'onModify', 'onClose', 'onDelete']
-```
-
-
-### raise_event(eventName, *args, **kwargs)
-
-**Description**
-
-Rises specific event registered during initialization.
-
-**Parameters**
-
-- `eventName` - `any` - mandatory, name of the event to be raised.
-- `*args` - `list` - optional, all simple parameters we want to pass to our subscribers (param1, param2, param3...).
-- `**kwargs` - `dictionary` - optional, all named parameters we want to pass (param1=value1, param2=value2, param3=value3) 
-
-**Example**
-
-Check subscribe method's example link [above](#subscribeeventname-subscriber).
-
-
-### remove_subscribers_by_event_name(event_name)
-
-**Description**
-
-Removes all subscribers for the specified event_name
-
-**Parameters**
-
-- `eventName` - `any` - mandatory, name of the event we want to remove subscribers for.
-
-**Example**
-
-```python
-from EventNotifier import Notifier
-class FileWatchDog():
-    def onOpen(self, fileName, openMode):
-        print(f"File {fileName} opened with {openMode} mode")
-
-    def onClose(self, fileName):
-        print(f"File {fileName} closed")
-
-
-def onOpenStandaloneMethod(fileName, openMode):
-    print(f"StandaloneMethod: File {fileName} opened with {openMode} mode")
-
-watchDog = FileWatchDog()
-
-notifier = Notifier(["onCreate", "onOpen", "onModify", "onClose", "onDelete"])
-
-notifier.subscribe("onOpen", watchDog.onOpen)
-notifier.subscribe("onOpen", onOpenStandaloneMethod)
-notifier.subscribe("onClose", watchDog.onClose)
-
-print("\nAfter subscription:")
-notifier.raise_event("onOpen", openMode="w+", fileName="test_file.txt")  # order of named parameters is not important
-notifier.raise_event("onClose", fileName="test_file.txt")
-
-notifier.remove_subscribers_by_event_name("onOpen")
-
-print("\nAfter removal of onOpen subscribers:")
-notifier.raise_event("onOpen", openMode="w+", fileName="test_file.txt")  # order of named parameters is not important
-notifier.raise_event("onClose", fileName="test_file.txt")
-
-notifier.remove_subscribers_by_event_name("onClose")
-
-print("\nAfter removal of onClose subscribers:")
-notifier.raise_event("onOpen", openMode="w+", fileName="test_file.txt")  # order of named parameters is not important
-notifier.raise_event("onClose", fileName="test_file.txt")
-```
-
-will output:
-```console
-After subscription:
-File test_file.txt opened with w+ mode
-StandaloneMethod: File test_file.txt opened with w+ mode
-File test_file.txt closed
-
-After removal of onOpen subscribers:
-File test_file.txt closed
-
-After removal of onClose subscribers:
-```
-
-
-### remove_all_subscribers()
-
-**Description**
-
-Removes all subscribers for all events
-
-**Example**
-
-```python
-from EventNotifier import Notifier
-class FileWatchDog():
-    def onOpen(self, fileName, openMode):
-        print(f"File {fileName} opened with {openMode} mode")
-
-    def onClose(self, fileName):
-        print(f"File {fileName} closed")
-
-
-def onOpenStandaloneMethod(fileName, openMode):
-    print(f"StandaloneMethod: File {fileName} opened with {openMode} mode")
-
-watchDog = FileWatchDog()
-
-notifier = Notifier(["onCreate", "onOpen", "onModify", "onClose", "onDelete"])
-
-notifier.subscribe("onOpen", watchDog.onOpen)
-notifier.subscribe("onOpen", onOpenStandaloneMethod)
-notifier.subscribe("onClose", watchDog.onClose)
-
-print("\nAfter subscription:")
-notifier.raise_event("onOpen", openMode="w+", fileName="test_file.txt")
-notifier.raise_event("onClose", fileName="test_file.txt")
-
-notifier.remove_all_subscribers()
-
-print("\nAfter removal of all subscribers:")
-notifier.raise_event("onOpen", openMode="w+", fileName="test_file.txt")
-notifier.raise_event("onClose", fileName="test_file.txt")
-```
-
-will give:
-```console
-After subscription:
-File test_file.txt opened with w+ mode
-StandaloneMethod: File test_file.txt opened with w+ mode
-File test_file.txt closed
-
-After removal of all subscribers:
-```
-
-
+TBD
 
 ## Tests
 
@@ -322,15 +264,15 @@ $ pip install pytest-cov
 Then inside test subdirectory call: 
 
 ```sh
-pytest --cov=../EventNotifier --cov-report=html
+pytest --cov=../BitParser --cov-report=html
 ```
 
 ## License
 
 License
-Copyright (C) 2020 Vitalij Gotovskij
+Copyright (C) 2022 Vitalij Gotovskij
 
-event-notifier binaries and source code can be used according to the MIT License
+bit-parser binaries and source code can be used according to the MIT License
 
 
 ## Contribute
