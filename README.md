@@ -3,13 +3,13 @@
 
 # bit-parser
 
-This is a configurable parser allowing you to describe all bits in a byte representing bit field set (or a bit map) and convert it into a human-readable form.  
+This is a configurable parser allowing to define your own low-level protocol and parse its representation provided as hexadecimal string and convert it into a human-readable form.
 
-It allows to parse bit maps consisting of several bytes, where each bit has its own meaning. Cases where several bits encode one parameter (like status code or counter) are covered as well. Also, special helpers are provided for cases where several consecutive bits represent the same value (for example RFU - Reserved for Future Use bits).
+With bit-parser you can parse bit maps consisting of several bytes, where each bit has its own unique meaning or where several bits are grouped together to represent some kind of status, error code or counter.  Also, special helpers are provided for cases where several consecutive bits represent the same value (for example RFU - Reserved for Future Use bits).
 
-This module is not intended for parsing complex streaming protocols or protocols containing many hundreds and thousands of bytes of information, but it can be very useful as a component of more complex parsers or as a parser of parts of protocols contained in log files to make them easier for people to understand.
+This module is not intended for parsing complex streaming protocols or protocols containing many hundreds and thousands of bytes of information, but it can be useful as a sub-component for a more complex parsers or as a parser for a log files containing much of useful information provided in a hexadecimal format.
 
-Currently, bit-parser is only able to parse binary data provided in a form of hexadecimal string (i.e. "FA 02 44", for example). If you are working with real binary data and want to convert it to a hexadecimal     
+Currently, bit-parser is unable to work with binary data directly, but only with its string representation. If you are working with real binary data and still want to try bit-parser then, first, convert your data into hexadecimal string with a help of binascii module (take a look at functions like binascii.hexlify()).    
 
 ## Contents
 
@@ -26,11 +26,11 @@ Currently, bit-parser is only able to parse binary data provided in a form of he
 
 ## Motivation
 
-In software development it's quite often happens that developer needs to deal with different data represented in formats not easily readable for human. Usually microcontrollers used in IoT or other embedded systems, usually, does not have enough resources to output "novels" into their log files describing what just happened in the system. As a result, most of such log files contain a lot of hexadecimal numbers representing statuses, error codes, counters, levels and many more.
+In software development it's quite often happens to deal with different data represented in not-so-easy-readable formats. Usually microcontrollers used in IoT or other embedded systems, does not have enough resources to output "novels" into their log files describing what just happened in the system. As a result, most of such log files contain a lot of hexadecimal numbers representing statuses, error codes, counters, levels and many more.
 
-Because of that it is always worth to write additional tooling allowing fast and error-prone reading of such files.
+Because of that, it is always worth to write additional tooling enabling fast and error-prone reading of such a files.
 
-bit-parser can definetely serve here as a corner-stone component for implementing such tooling.
+bit-parser can definitely serve here as a corner-stone component for implementing such a tooling.
 
 ## Usage
 
@@ -198,13 +198,13 @@ def create_advanced_protocol_parser():
 
 advanced_parser = create_advanced_protocol_parser()
 
-pprint(advanced_parser("44 F0")) # spaces are allowed but are not mandatory
+pprint(advanced_parser("40 F0")) # spaces are allowed but are not mandatory
 ```
 Output:
 ```console
 ['sensor ID: 2',
  'temperature OK',
- 'LED is ON',
+ 'LED is OFF',
  'heating mode 3',
  'heating module 1 on',
  'heating module 2 on']
