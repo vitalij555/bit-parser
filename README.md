@@ -9,7 +9,7 @@ With bit-parser you can parse bit maps consisting of several bytes, where each b
 
 This module is not intended for parsing complex streaming protocols or protocols containing many hundreds and thousands of bytes of information, but it can be useful as a sub-component for a more complex parsers or as a parser for a log files containing much of useful information provided in a hexadecimal format.
 
-Currently, bit-parser is unable to work with binary data directly, but only with its string representation. If you are working with real binary data and still want to try bit-parser then, first, convert your data into hexadecimal string with a help of binascii module (take a look at functions like binascii.hexlify()).    
+Byte arrays and hexadecimal strings are accepted as an input.     
 
 ## Contents
 

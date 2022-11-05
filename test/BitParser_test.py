@@ -1,3 +1,5 @@
+import binascii
+
 import pytest
 from unittest.mock import Mock
 import sys
@@ -6,7 +8,7 @@ import sys
 if not '../bit-parser' in sys.path:
     sys.path.insert(1, '../bit-parser')
 
-from BitParser.BitParser import MultiBitValueParser, parse_bits, SameValueRange
+from BitParser.BitParser import MultiBitValueParser, parse_bits, SameValueRange, parse_bits_binary
 
 
 @pytest.fixture(scope="class")  # scope="function" is default
@@ -141,7 +143,7 @@ def multibyte_protocol_with_counter():
 
     ]
     def protocol_with_counter_parser(bytes_to_parse):
-        return parse_bits(bytes_to_parse, protocol_with_counter)
+        return parse_bits_binary(binascii.unhexlify(bytes_to_parse), protocol_with_counter)
     return protocol_with_counter_parser
 
 
