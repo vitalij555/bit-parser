@@ -224,3 +224,185 @@ def parse_bits_full(bytes, descriptors: list) -> list:
         return parse_bits_binary_full(bytes, descriptors)
 
 
+def _infer_multibit_name(labels):
+    if not labels:
+        return None
+
+    colon_prefixes = [label.split(": ", 1)[0] for label in labels if ": " in label]
+    if colon_prefixes and len(colon_prefixes) == len(labels):
+        unique_prefixes = set(colon_prefixes)
+        if len(unique_prefixes) == 1:
+            return colon_prefixes[0]
+
+    def candidate_from_label(label):
+        if ": " in label:
+            return label.split(": ", 1)[0].strip()
+
+        lower = label.lower()
+        if lower.endswith(" on"):
+            return label[:-3].rstrip()
+        if lower.endswith(" off"):
+            return label[:-4].rstrip()
+
+        idx = len(label)
+        while idx > 0 and label[idx - 1].isdigit():
+            idx -= 1
+        if idx < len(label):
+            return label[:idx].rstrip()
+
+        return None
+
+    candidates = []
+    for label in labels:
+        candidate = candidate_from_label(label)
+        if candidate:
+            candidates.append(candidate)
+
+    if not candidates:
+        return None
+
+    counts = {}
+    for candidate in candidates:
+        counts[candidate] = counts.get(candidate, 0) + 1
+
+    sorted_candidates = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    if len(sorted_candidates) > 1 and sorted_candidates[0][1] == sorted_candidates[1][1]:
+        return None
+
+    if sorted_candidates[0][1] < 2:
+        return None
+
+    return sorted_candidates[0][0]
+
+
+def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
+    bitFieldDescriptorLength = len(descriptors)
+
+    if bitFieldDescriptorLength % 8 != 0:
+        raise ValueError(f"Descriptor length ({bitFieldDescriptorLength}) is not divisible by 8!")
+
+    if values is None:
+        values = {}
+
+    if isinstance(enabled_labels, (str, bytes)):
+        raise ValueError("enabled_labels must be an iterable of strings")
+
+    enabled_labels = list(enabled_labels or [])
+    for label in enabled_labels:
+        if not isinstance(label, str):
+            raise ValueError("enabled_labels must contain only strings")
+
+    if not isinstance(values, dict):
+        raise ValueError("values must be a dict mapping field names to integers")
+
+    single_label_positions = {}
+    multibit_groups = {}
+    for index, descriptor in enumerate(descriptors):
+        if isinstance(descriptor, MultiBitValueParser):
+            multibit_groups.setdefault(descriptor, []).append(index)
+        else:
+            single_label_positions.setdefault(descriptor, []).append(index)
+
+    group_info = {}
+    name_to_groups = {}
+    for parser, indices in multibit_groups.items():
+        num_bits = parser.numOfElements
+        if len(indices) != num_bits:
+            raise ValueError(
+                f"MultiBitValueParser expects {num_bits} bits but appears {len(indices)} times in descriptors"
+            )
+
+        label_to_bits = {}
+        for bit_string, label in parser.evaluator.items():
+            label_to_bits.setdefault(label, []).append(bit_string)
+
+        labels = list(label_to_bits.keys())
+        name = _infer_multibit_name(labels)
+        group_info[parser] = {
+            "indices": indices,
+            "num_bits": num_bits,
+            "label_to_bits": label_to_bits,
+            "name": name,
+        }
+        if name:
+            name_to_groups.setdefault(name, []).append(parser)
+
+    for name, groups in name_to_groups.items():
+        if len(groups) > 1:
+            raise ValueError(f"Multi-bit field name '{name}' is ambiguous across multiple groups")
+
+    group_set = set()
+    bit_values = [0] * bitFieldDescriptorLength
+
+    def apply_bit_string(indices, bit_string):
+        if len(bit_string) != len(indices):
+            raise ValueError("Multi-bit value does not match descriptor bit count")
+        for index, bit in zip(indices, bit_string):
+            if bit not in ("0", "1"):
+                raise ValueError("Multi-bit value must be a binary string")
+            bit_values[index] = 1 if bit == "1" else 0
+
+    unused_values = dict(values)
+    for parser, info in group_info.items():
+        name = info["name"]
+        if name and name in unused_values:
+            value = unused_values.pop(name)
+            if not isinstance(value, int):
+                raise ValueError(f"Value for '{name}' must be an integer")
+            if value < 0:
+                raise ValueError(f"Value for '{name}' must be non-negative")
+            bit_string = format(value, f"0{info['num_bits']}b")
+            if bit_string not in parser.evaluator:
+                raise ValueError(f"Value {value} for '{name}' is not defined in descriptors")
+            apply_bit_string(info["indices"], bit_string)
+            group_set.add(parser)
+
+    multi_label_groups = {}
+    for parser, info in group_info.items():
+        for label in info["label_to_bits"]:
+            multi_label_groups.setdefault(label, []).append(parser)
+
+    for label in enabled_labels:
+        has_single = label in single_label_positions and single_label_positions[label]
+        has_multi = label in multi_label_groups
+        if has_single and has_multi:
+            raise ValueError(f"Label '{label}' is ambiguous between single and multi-bit descriptors")
+
+        if has_single:
+            bit_index = single_label_positions[label].pop(0)
+            bit_values[bit_index] = 1
+            continue
+
+        if has_multi:
+            groups = multi_label_groups[label]
+            if len(groups) > 1:
+                raise ValueError(f"Label '{label}' matches multiple multi-bit groups")
+            parser = groups[0]
+            if parser in group_set:
+                raise ValueError(f"Multi-bit group for '{label}' is already set")
+            label_bits = group_info[parser]["label_to_bits"][label]
+            if len(label_bits) != 1:
+                raise ValueError(f"Label '{label}' is ambiguous for multi-bit encoding")
+            apply_bit_string(group_info[parser]["indices"], label_bits[0])
+            group_set.add(parser)
+            continue
+
+        raise ValueError(f"Unknown label '{label}'")
+
+    if unused_values:
+        unknown = ", ".join(sorted(unused_values.keys()))
+        raise ValueError(f"Unknown multi-bit field(s): {unknown}")
+
+    for parser, info in group_info.items():
+        if parser not in group_set:
+            name = info["name"] or "unnamed"
+            raise ValueError(f"Missing value for multi-bit field '{name}'")
+
+    byte_values = [0] * (bitFieldDescriptorLength // 8)
+    for index, bit in enumerate(bit_values):
+        if bit:
+            byte_index = index // 8
+            bit_index = index % 8
+            byte_values[byte_index] |= 1 << (7 - bit_index)
+
+    return binascii.hexlify(bytes(byte_values)).decode("ascii").upper()

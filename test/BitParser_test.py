@@ -8,7 +8,7 @@ import sys
 if not '../bit-parser' in sys.path:
     sys.path.insert(1, '../bit-parser')
 
-from BitParser.BitParser import MultiBitValueParser, parse_bits, parse_bits_full, SameValueRange, parse_bits_binary
+from BitParser.BitParser import MultiBitValueParser, parse_bits, parse_bits_full, SameValueRange, parse_bits_binary, encode_bits
 
 
 @pytest.fixture(scope="class")  # scope="function" is default
@@ -415,3 +415,98 @@ class TestBitParser:
         grouped_bits = [entry for entry in parsed if entry.get("kind") == "bit" and entry.get("group_id") == summary["group_id"]]
         assert len(grouped_bits) == 2
         assert all(entry["group_label"] == "mode 2" for entry in grouped_bits)
+
+
+    def test_encode_bits_simple(self):
+        descriptors = [ "I/O pin Nr7 high level",
+                        "I/O pin Nr6 high level",
+                        "I/O pin Nr5 high level",
+                        "I/O pin Nr4 high level",
+                        "I/O pin Nr3 high level",
+                        "I/O pin Nr2 high level",
+                        "I/O pin Nr1 high level",
+                        "I/O pin Nr0 high level"]
+        encoded = encode_bits(
+            ["I/O pin Nr7 high level", "I/O pin Nr1 high level", "I/O pin Nr0 high level"],
+            descriptors
+        )
+        assert encoded == "83"
+
+
+    def test_encode_bits_advanced(self):
+        heating_mode = MultiBitValueParser({ "0000": "heating mode off",
+                                             "0001": "heating mode 1",
+                                             "0010": "heating mode 2",
+                                             "0011": "heating mode 3",
+                                             "0100": "heating mode 4",
+                                             "0101": "heating mode 5",
+                                             "0110": "heating mode 6",
+                                             "0111": "heating mode 7",
+                                             "1000": "heating mode 8"},
+                                             SameValueRange(0b1001, 0b1111, 4, "RFU"))
+
+        status = MultiBitValueParser({  "00": "temperature OK",
+                                        "01": "temperature too low",
+                                        "10": "temperature too high",
+                                        "11": "broken sensor"})
+
+        led_status = MultiBitValueParser({"0": "LED is OFF",
+                                          "1": "LED is ON"})
+
+        sensor_id = MultiBitValueParser(SameValueRange(0b000, 0b111, 3, "sensor ID", return_value_instead_of_name=True))
+
+        advanced_protocol = [
+                             sensor_id,
+                             sensor_id,
+                             sensor_id,
+                             status,
+                             status,
+                             led_status,
+                             heating_mode,
+                             heating_mode,
+                             heating_mode,
+                             heating_mode,
+                             "heating module 1 on",
+                             "heating module 2 on",
+                             "heating module 3 on",
+                             "heating module 4 on",
+                             "RFU",
+                             "RFU",
+                          ]
+
+        encoded = encode_bits(
+            ["temperature too low", "LED is OFF", "heating module 1 on", "heating module 2 on"],
+            advanced_protocol,
+            values={"heating mode": 3, "sensor ID": 2},
+        )
+        assert encoded == "48F0"
+
+
+    def test_encode_bits_missing_multibit_value(self):
+        mode = MultiBitValueParser({ "00": "mode 0",
+                                     "01": "mode 1",
+                                     "10": "mode 2",
+                                     "11": "mode 3"})
+        descriptors = [ mode,
+                        mode,
+                        "flag a",
+                        "flag b",
+                        "flag c",
+                        "flag d",
+                        "flag e",
+                        "flag f"]
+        with pytest.raises(ValueError):
+            encode_bits(["flag a"], descriptors)
+
+
+    def test_encode_bits_unknown_label(self):
+        descriptors = [ "flag a",
+                        "flag b",
+                        "flag c",
+                        "flag d",
+                        "flag e",
+                        "flag f",
+                        "flag g",
+                        "flag h"]
+        with pytest.raises(ValueError):
+            encode_bits(["flag z"], descriptors)

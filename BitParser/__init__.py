@@ -1,1 +1,7 @@
-from BitParser.BitParser import parse_bits, parse_bits_full, MultiBitValueParser, SameValueRange
+from BitParser.BitParser import (
+    parse_bits,
+    parse_bits_full,
+    encode_bits,
+    MultiBitValueParser,
+    SameValueRange,
+)

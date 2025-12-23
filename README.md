@@ -16,6 +16,7 @@ Inputs can be raw bytes or hex strings like `"A3"` (no spaces).
   - [Simple example](#simple-example)
   - [Advanced example](#advanced-example)
   - [Full list output (for UI)](#full-list-output-for-ui)
+  - [Encode (reverse)](#encode-reverse)
 - [Installation](#installation)
 - [API Overview](#api-overview)
 - [Tests](#tests)
@@ -244,6 +245,43 @@ Example output:
 {'kind': 'bit', 'label': 'I/O pin Nr0 high level', 'enabled': False, 'raw_bit': 0, ...}
 ```
 
+### Encode (reverse)
+
+Use `encode_bits` to generate a hex string from enabled labels and numeric multi-bit values.
+For multi-bit fields you must provide either:
+- a label (e.g., `"LED is ON"`) in `enabled_labels`, or
+- a numeric value in `values` (e.g., `{"heating mode": 3}`).
+Field names for `values` are inferred from the multi-bit labels (for example: `"sensor ID"` or `"heating mode"`).
+This is handy when building web-based hex configuration generators or diagnostic calculators.
+
+```python
+from BitParser import encode_bits, MultiBitValueParser, SameValueRange
+
+heating_mode = MultiBitValueParser(
+    {"0000": "heating mode off",
+     "0001": "heating mode 1",
+     "0010": "heating mode 2",
+     "0011": "heating mode 3"}
+)
+
+descriptors = [
+    "I/O pin Nr7 high level",
+    "I/O pin Nr6 high level",
+    "I/O pin Nr5 high level",
+    "I/O pin Nr4 high level",
+    "I/O pin Nr3 high level",
+    "I/O pin Nr2 high level",
+    "I/O pin Nr1 high level",
+    "I/O pin Nr0 high level",
+]
+
+hex_out = encode_bits(
+    ["I/O pin Nr7 high level", "I/O pin Nr1 high level", "I/O pin Nr0 high level"],
+    descriptors
+)
+print(hex_out)  # "83"
+```
+
 ## Installation
 
 ```
@@ -259,6 +297,8 @@ pip install -U bit-parser
   Returns only enabled descriptors (bits with value 1) and aggregated multi-bit values.
 - `parse_bits_full(bytes_or_hex, descriptors) -> list[dict]`  
   Returns one entry for every bit, with `enabled` markers so UIs can grey out disabled bits. For multi-bit fields, also returns a summary entry with the aggregated value.
+- `encode_bits(enabled_labels, descriptors, values=None) -> str`  
+  Returns an uppercase hex string from enabled labels and multi-bit numeric values.
 
 ### Descriptor helpers
 
