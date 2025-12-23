@@ -38,11 +38,11 @@ jobs:
         pwd
         ls -la
         codecov -t ${{ secrets.CODECOV_TOKEN }}
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v4
       with:
         name: coverage.xml
         path: /home/runner/work/bit-parser/bit-parser/coverage.xml
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v4
       with:
         name: htmlcov
         path: '/home/runner/work/bit-parser/**/*htmlcov*'
