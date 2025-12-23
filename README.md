@@ -3,13 +3,11 @@
 
 # bit-parser
 
-This is a configurable parser allowing to define your own low-level protocol and parse its representation provided as hexadecimal string and convert it into a human-readable form.
+bit-parser is a small helper for decoding compact bitfields into human-readable labels.
 
-With bit-parser you can parse bit maps consisting of several bytes, where each bit has its own unique meaning or where several bits are grouped together to represent some kind of status, error code or counter.  Also, special helpers are provided for cases where several consecutive bits represent the same value (for example RFU - Reserved for Future Use bits).
+Use it when you receive short, fixed-size bitmaps where each bit has a meaning, or when a group of bits represents a value like a status code or counter. It is not intended for streaming protocols or large binary payloads, but it works well for logs, diagnostics, and UI tooling.
 
-This module is not intended for parsing complex streaming protocols or protocols containing many hundreds and thousands of bytes of information, but it can be useful as a sub-component for a more complex parsers or as a parser for a log files containing much of useful information provided in a hexadecimal format.
-
-Byte arrays and hexadecimal strings are accepted as an input.     
+Inputs can be raw bytes or hex strings like `"A3"` (no spaces).
 
 ## Contents
 
@@ -17,6 +15,7 @@ Byte arrays and hexadecimal strings are accepted as an input.
 - [Usage](#usage)
   - [Simple example](#simple-example)
   - [Advanced example](#advanced-example)
+  - [Full list output (for UI)](#full-list-output-for-ui)
 - [Installation](#installation)
 - [API Overview](#api-overview)
 - [Tests](#tests)
@@ -26,16 +25,14 @@ Byte arrays and hexadecimal strings are accepted as an input.
 
 ## Motivation
 
-In software development it's quite often happens to deal with different data represented in not-so-easy-readable formats. Usually microcontrollers used in IoT or other embedded systems, does not have enough resources to output "novels" into their log files describing what just happened in the system. As a result, most of such log files contain a lot of hexadecimal numbers representing statuses, error codes, counters, levels and many more.
+Embedded and IoT devices often log compact status bytes instead of long, descriptive messages. Those hex values are fast for devices to output, but slow for humans to interpret.
 
-Because of that, it is always worth to write additional tooling enabling fast and error-prone reading of such a files.
-
-bit-parser can definitely serve here as a corner-stone component for implementing such a tooling.
+bit-parser lets you describe what each bit (or bit range) means and turn those bytes into readable labels or values.
 
 ## Usage
 
-### Simple example 
-Let's start from something simple. Let's imagine in our current IoT project we need to deal with some very simple protocol: controller sends command to one of its peripherals and gets back status of its I/O pins. As a result of such a request we get several bytes of a response, one byte of which encodes situation on I/O pins. There "1" means high voltage level on CPU pin and "0" means low. We can describe our byte of interest as follows:
+### Simple example
+Imagine a controller returns one status byte where each bit represents the state of an I/O pin. A `1` means high voltage and `0` means low:
 
 ```text
 # Byte 0:
@@ -48,16 +45,12 @@ Let's start from something simple. Let's imagine in our current IoT project we n
     Bit 1: I/O pin Nr1 high level
     Bit 0: I/O pin Nr0 high level
 ```
-Controller then writes request and response pair into a log file (or console). And we would like to create a tool allowing us to pass such a log line and get human-readable representation of response bytes. 
-
-Here is how we can do that with a help of bit-parser:
+You can describe the bits and decode a response like this:
 
 ```python
-# 0. Import parse_bits function
 from BitParser import parse_bits
 from pprint import pprint
 
-# 1. First we describe bits as python list:
 bits_meaning = [ "I/O pin Nr7 high level",
                  "I/O pin Nr6 high level",
                  "I/O pin Nr5 high level",
@@ -67,7 +60,7 @@ bits_meaning = [ "I/O pin Nr7 high level",
                  "I/O pin Nr1 high level",
                  "I/O pin Nr0 high level",]
 
-# 2. Just parse..
+# Parse the input bytes or hex string
 pprint(parse_bits("A3", bits_meaning))
 ```
 Console output:
@@ -80,9 +73,9 @@ Console output:
 
 ### Advanced example
 
-Although it's not a rare case when one bit represents one "thing" in a byte, most of the time information is packed into a bytes in a more efficient way. For example, it is quite often to have situation when part of a byte (some of its bits located one after another) is dedicated to encode some number or a code. For example, we can say that bits 2-4 in a byte 2 are representing some status code. Now, instead of being able to encode only 3 different statuses with 3 bits we are able to encode 8 different statuses (000, 001, 010, .. 111). At the same time other bits in a byte can still represent only one "thing" per bit.
+Often, protocols pack multiple bits together to represent a value. For example, bits 2-4 in a byte can encode a status code. With 3 bits you can represent 8 statuses (000, 001, 010, ... 111), while other bits still represent a single flag.
 
-Having that in mind, let's consider more sophisticatyed case. 
+Let's consider a more advanced case.
 
 Imagine we have a thermostat controller and the main module. Main manages temperature controller by sending it commands and obtaining back responses. For example, one of the responses could be represented by two bytes like following:
 
@@ -131,13 +124,13 @@ Heating mode (4 bits):
     15 - 1111 - RFU        
 ```  
 
-From above description we can make conclusion that in this particular case we have 4 different sutuations to handle:
-1. Bits like Byte1.bit2-bit5 ("heating module N on") or Byte1.bit1 ("RFU") represent something on their own (as in the simplest case we had in the first example above)
-2. Byte0.bit5-bit7 represent device ID which means we are interested in a value itself (1,2,3,4,5..) and not in a label ("device id") here, because label will be able to tell only that device "has some id assigned" - which we already know anyway.
-3. Byte0.bit0,bit1-Byte1.bit6,bit7 encode heating mode. Although it would be not too smart to organise these four bits in a way it is shown in our example (bit pairs located in a different bytes), let's assume we got it "as is" and there is no chance to change this protocol. Shortly we will ensure that bit-parser is able to handle even cases like this without a problem. Also note, we have codes from 9 to 15 "Reserved for Future Use. This situation is also quite common in embedded world when we whant to leave some space for future improvements (or vice versa - sometimes empty spaces in a protocol might appear after we improve something)
-4. Byte0.bit2 ("LED is ON") in general looks the same as a bit representing one "thing" (case described in bullet 1). The difference here is that compared to simple case we are interested not only in getting to know when LED is ON, but also to know if LED is OFF. In other words, there should be always a line amongst our parsed lines saying whether LED is ON or OFF. 
-           
-Now having all these peculiarities in mind, let's define our parser for these two bytes:
+From the description above, there are four cases to handle:
+1. Single-bit flags (e.g., "heating module N on" or "RFU")
+2. A multi-bit value where we care about the numeric value (sensor ID)
+3. A multi-bit value that spans bytes (heating mode)
+4. A single-bit status that should always be reported (LED ON/OFF)
+
+Now let's define a parser for these two bytes:
 
 ```python
 from BitParser import parse_bits, MultiBitValueParser, SameValueRange
@@ -191,14 +184,12 @@ advanced_protocol = [
                          "RFU",                 # bit 0: 00000001
                       ]
 
-def create_advanced_protocol_parser():
-  def advanced_protocol_parser(bytes_to_parse):
-      return parse_bits(bytes_to_parse, advanced_protocol)
-  return advanced_protocol_parser
+def advanced_protocol_parser(bytes_to_parse):
+    return parse_bits(bytes_to_parse, advanced_protocol)
 
-advanced_parser = create_advanced_protocol_parser()
+advanced_parser = advanced_protocol_parser
 
-pprint(advanced_parser("40 F0")) # spaces are allowed but are not mandatory
+pprint(advanced_parser("40F0"))
 ```
 Output:
 ```console
@@ -209,9 +200,9 @@ Output:
  'heating module 1 on',
  'heating module 2 on']
 ```
-Let's try to switch LED ON...
-```
-pprint(advanced_parser("4C F0"))
+To see LED ON, set bit 2:
+```python
+pprint(advanced_parser("4CF0"))
 ```
 Output:
 ```console
@@ -221,7 +212,36 @@ Output:
  'heating mode 3',
  'heating module 1 on',
  'heating module 2 on']
+```
 
+### Full list output (for UI)
+
+If you want to show every bit (enabled or not), use `parse_bits_full`. It returns:
+- One entry per bit with `enabled: True/False`
+- For multi-bit fields, an extra summary entry with the aggregated value
+
+```python
+from BitParser import parse_bits_full
+
+descriptors = [
+    "I/O pin Nr7 high level",
+    "I/O pin Nr6 high level",
+    "I/O pin Nr5 high level",
+    "I/O pin Nr4 high level",
+    "I/O pin Nr3 high level",
+    "I/O pin Nr2 high level",
+    "I/O pin Nr1 high level",
+    "I/O pin Nr0 high level",
+]
+
+rows = parse_bits_full("80", descriptors)
+print(rows[0])
+print(rows[-1])
+```
+Example output:
+```console
+{'kind': 'bit', 'label': 'I/O pin Nr7 high level', 'enabled': True, 'raw_bit': 1, ...}
+{'kind': 'bit', 'label': 'I/O pin Nr0 high level', 'enabled': False, 'raw_bit': 0, ...}
 ```
 
 ## Installation
@@ -233,7 +253,38 @@ pip install -U bit-parser
 
 ## API Overview
 
-TBD
+### Functions
+
+- `parse_bits(bytes_or_hex, descriptors) -> list[str]`  
+  Returns only enabled descriptors (bits with value 1) and aggregated multi-bit values.
+- `parse_bits_full(bytes_or_hex, descriptors) -> list[dict]`  
+  Returns one entry for every bit, with `enabled` markers so UIs can grey out disabled bits. For multi-bit fields, also returns a summary entry with the aggregated value.
+
+### Descriptor helpers
+
+- `MultiBitValueParser`  
+  Collects consecutive bits and maps the resulting bit string to a label.
+- `SameValueRange`  
+  Generates a mapping for a continuous range of values (useful for RFU or counters).
+
+### parse_bits_full output shape
+
+Each result entry is a `dict`.
+
+Bit entry:
+- `kind`: `"bit"`
+- `label`: descriptor string (or `None` for multi-bit contributors)
+- `enabled`: `True`/`False`
+- `raw_bit`: `0`/`1`
+- `byte_index`, `bit_index`, `descriptor_index`
+- For multi-bit contributors: `group_id`, `group_bit_index`, `group_label`, `summary_index`
+
+Summary entry:
+- `kind`: `"multi_bit"`
+- `label`: evaluated value (e.g., `"heating mode 3"`)
+- `raw_bits`: assembled bit string
+- `value_int`: integer value of `raw_bits`
+- `group_id`, `descriptor_indices`
 
 ## Tests
 

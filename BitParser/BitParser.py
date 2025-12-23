@@ -2,7 +2,19 @@ import binascii
 from pprint import pprint, pformat
 from collections.abc import MutableMapping
 
-from bitops import get_bit, ENDIANNESS
+try:
+    from bitops import get_bit, ENDIANNESS
+except ModuleNotFoundError:
+    from enum import Enum
+
+    class ENDIANNESS(Enum):
+        LITTLE = "little"
+        BIG = "big"
+
+    def get_bit(value, bit_num, endiannes=ENDIANNESS.LITTLE):
+        if endiannes == ENDIANNESS.LITTLE:
+            bit_num = 7 - bit_num
+        return (value >> bit_num) & 1
 
 
 class Dict_Returning_Key_With_Value(MutableMapping):
@@ -115,5 +127,100 @@ def parse_bits(bytes, descriptors: list) -> str:
         return parse_bits_binary(bytes, descriptors)
 
 
+def parse_bits_binary_full(bytes, descriptors: list) -> list:
+    bitFieldDescriptorLength = len(descriptors)
+
+    if bitFieldDescriptorLength % 8 != 0:
+        raise ValueError(f"Descriptor length ({bitFieldDescriptorLength}) is not divisible by 8!")
+
+    bytes_len = len(bytes)
+
+    if bytes_len != bitFieldDescriptorLength // 8:
+        raise ValueError(f"bytesStr length ({bytes_len}) does not correspond to descriptors list length ({bitFieldDescriptorLength // 8})")
+
+    results = []
+    multibit_states = {}
+    next_group_id = 0
+
+    for byteNum, byte in enumerate(bytes):
+        for bitNum in range(0, 8):
+            descriptor_index = byteNum * 8 + bitNum
+            descriptor = descriptors[descriptor_index]
+            bit = get_bit(byte, bitNum, endiannes=ENDIANNESS.LITTLE)
+
+            if isinstance(descriptor, MultiBitValueParser):
+                state = multibit_states.get(descriptor)
+                if state is None:
+                    state = {
+                        "group_id": None,
+                        "pending_entries": [],
+                        "pending_bits": [],
+                        "pending_indices": [],
+                    }
+                    multibit_states[descriptor] = state
+
+                if not state["pending_bits"]:
+                    state["group_id"] = next_group_id
+                    next_group_id += 1
+
+                group_bit_index = len(state["pending_bits"])
+                entry = {
+                    "kind": "bit",
+                    "label": None,
+                    "enabled": bit == 1,
+                    "raw_bit": bit,
+                    "byte_index": byteNum,
+                    "bit_index": bitNum,
+                    "descriptor_index": descriptor_index,
+                    "group_id": state["group_id"],
+                    "group_bit_index": group_bit_index,
+                    "group_label": None,
+                }
+                results.append(entry)
+                state["pending_entries"].append(len(results) - 1)
+                state["pending_bits"].append(str(bit))
+                state["pending_indices"].append(descriptor_index)
+
+                ret = descriptor(str(bit))
+                if ret is not None:
+                    raw_bits = "".join(state["pending_bits"])
+                    summary_entry = {
+                        "kind": "multi_bit",
+                        "label": ret,
+                        "enabled": True,
+                        "raw_bits": raw_bits,
+                        "value_int": int(raw_bits, 2),
+                        "group_id": state["group_id"],
+                        "descriptor_indices": state["pending_indices"],
+                    }
+                    results.append(summary_entry)
+                    summary_index = len(results) - 1
+
+                    for entry_index in state["pending_entries"]:
+                        results[entry_index]["group_label"] = ret
+                        results[entry_index]["summary_index"] = summary_index
+
+                    state["pending_entries"] = []
+                    state["pending_bits"] = []
+                    state["pending_indices"] = []
+            else:
+                results.append({
+                    "kind": "bit",
+                    "label": descriptor,
+                    "enabled": bit == 1,
+                    "raw_bit": bit,
+                    "byte_index": byteNum,
+                    "bit_index": bitNum,
+                    "descriptor_index": descriptor_index,
+                })
+
+    return results
+
+
+def parse_bits_full(bytes, descriptors: list) -> list:
+    if isinstance(bytes, str):  # hexadecimal string is supported (like "001122AAEEFF"
+        return parse_bits_binary_full(binascii.unhexlify(bytes), descriptors)
+    else:
+        return parse_bits_binary_full(bytes, descriptors)
 
 

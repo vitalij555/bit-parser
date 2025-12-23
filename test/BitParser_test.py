@@ -8,7 +8,7 @@ import sys
 if not '../bit-parser' in sys.path:
     sys.path.insert(1, '../bit-parser')
 
-from BitParser.BitParser import MultiBitValueParser, parse_bits, SameValueRange, parse_bits_binary
+from BitParser.BitParser import MultiBitValueParser, parse_bits, parse_bits_full, SameValueRange, parse_bits_binary
 
 
 @pytest.fixture(scope="class")  # scope="function" is default
@@ -367,3 +367,51 @@ class TestBitParser:
         assert len(parsed) == len(expected)
         print(all([a == b for a, b in zip(parsed, expected)]))
         assert all([a == b for a, b in zip(parsed, expected)])
+
+
+    def test_parse_bits_full_simple(self):
+        descriptors = [ "I/O pin Nr7 high level",
+                        "I/O pin Nr6 high level",
+                        "I/O pin Nr5 high level",
+                        "I/O pin Nr4 high level",
+                        "I/O pin Nr3 high level",
+                        "I/O pin Nr2 high level",
+                        "I/O pin Nr1 high level",
+                        "I/O pin Nr0 high level"]
+        parsed = parse_bits_full("80", descriptors)
+        assert len(parsed) == 8
+        first = parsed[0]
+        last = parsed[7]
+        assert first["kind"] == "bit"
+        assert first["label"] == "I/O pin Nr7 high level"
+        assert first["enabled"] is True
+        assert last["label"] == "I/O pin Nr0 high level"
+        assert last["enabled"] is False
+
+
+    def test_parse_bits_full_multibit_summary(self):
+        mode = MultiBitValueParser({ "00": "mode 0",
+                                     "01": "mode 1",
+                                     "10": "mode 2",
+                                     "11": "mode 3"})
+        descriptors = [ mode,
+                        mode,
+                        "flag a",
+                        "flag b",
+                        "flag c",
+                        "flag d",
+                        "flag e",
+                        "flag f"]
+        parsed = parse_bits_full("80", descriptors)
+        assert len(parsed) == 9
+
+        summary_entries = [entry for entry in parsed if entry.get("kind") == "multi_bit"]
+        assert len(summary_entries) == 1
+        summary = summary_entries[0]
+        assert summary["label"] == "mode 2"
+        assert summary["raw_bits"] == "10"
+        assert summary["value_int"] == 2
+
+        grouped_bits = [entry for entry in parsed if entry.get("kind") == "bit" and entry.get("group_id") == summary["group_id"]]
+        assert len(grouped_bits) == 2
+        assert all(entry["group_label"] == "mode 2" for entry in grouped_bits)
