@@ -1,15 +1,17 @@
+import os
 from pathlib import Path
 
 import setuptools
 from setuptools import setup
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_REL = os.path.relpath(ROOT_DIR, Path.cwd())
 long_description = (ROOT_DIR / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="bit-parser",
-    packages=setuptools.find_packages(where=str(ROOT_DIR)),
-    package_dir={"": str(ROOT_DIR)},
+    packages=setuptools.find_packages(where=ROOT_REL),
+    package_dir={"": ROOT_REL},
     version="1.0.4",
     license="MIT",
     description="Parse compact bitfields (bitmaps, flag sets) represented as hex strings.",

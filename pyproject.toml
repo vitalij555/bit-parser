@@ -37,3 +37,5 @@ Repository = "https://github.com/vitalij555/bit-parser"
 
 [tool.setuptools.packages.find]
 where = ["."]
+exclude = ["test*", "pypi*", "htmlcov*"]
+namespaces = false
