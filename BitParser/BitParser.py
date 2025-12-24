@@ -275,6 +275,30 @@ def _infer_multibit_name(labels):
     return sorted_candidates[0][0]
 
 
+def _parse_label_address(label, byte_length):
+    parts = label.rsplit(":", 2)
+    if len(parts) != 3:
+        return label, None
+
+    base = parts[0].strip()
+    if not base:
+        return label, None
+
+    try:
+        byte_index = int(parts[1].strip())
+        bit_number = int(parts[2].strip())
+    except ValueError:
+        return label, None
+
+    if byte_index < 0 or bit_number < 0 or bit_number > 7:
+        raise ValueError("Addressed label must use 'name:byte:bit' with bit in 0..7")
+    if byte_index >= byte_length:
+        raise ValueError(f"Byte index {byte_index} out of range for {byte_length} bytes")
+
+    descriptor_index = byte_index * 8 + (7 - bit_number)
+    return base, descriptor_index
+
+
 def describe_bits(descriptors: list) -> dict:
     bitFieldDescriptorLength = len(descriptors)
 
@@ -361,6 +385,8 @@ def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
     if bitFieldDescriptorLength % 8 != 0:
         raise ValueError(f"Descriptor length ({bitFieldDescriptorLength}) is not divisible by 8!")
 
+    byte_length = bitFieldDescriptorLength // 8
+
     if values is None:
         values = {}
 
@@ -385,6 +411,7 @@ def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
 
     group_info = {}
     name_to_groups = {}
+    index_to_group = {}
     for parser, indices in multibit_groups.items():
         num_bits = parser.numOfElements
         if len(indices) != num_bits:
@@ -406,10 +433,8 @@ def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
         }
         if name:
             name_to_groups.setdefault(name, []).append(parser)
-
-    for name, groups in name_to_groups.items():
-        if len(groups) > 1:
-            raise ValueError(f"Multi-bit field name '{name}' is ambiguous across multiple groups")
+        for descriptor_index in indices:
+            index_to_group[descriptor_index] = parser
 
     group_set = set()
     bit_values = [0] * bitFieldDescriptorLength
@@ -422,7 +447,42 @@ def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
                 raise ValueError("Multi-bit value must be a binary string")
             bit_values[index] = 1 if bit == "1" else 0
 
-    unused_values = dict(values)
+    unused_values = {}
+    addressed_values = []
+    for key, value in values.items():
+        if not isinstance(key, str):
+            raise ValueError("values keys must be strings")
+        base, descriptor_index = _parse_label_address(key, byte_length)
+        if descriptor_index is None:
+            unused_values[base] = value
+        else:
+            addressed_values.append((base, descriptor_index, value))
+
+    for base, descriptor_index, value in addressed_values:
+        descriptor = descriptors[descriptor_index]
+        if not isinstance(descriptor, MultiBitValueParser):
+            raise ValueError(f"Addressed value '{base}' does not point to a multi-bit field")
+
+        parser = descriptor
+        info = group_info[parser]
+        if info["name"] and base != info["name"]:
+            raise ValueError(f"Addressed value '{base}' does not match field name '{info['name']}'")
+        if parser in group_set:
+            raise ValueError(f"Multi-bit field '{base}' is already set")
+        if not isinstance(value, int):
+            raise ValueError(f"Value for '{base}' must be an integer")
+        if value < 0:
+            raise ValueError(f"Value for '{base}' must be non-negative")
+        bit_string = format(value, f"0{info['num_bits']}b")
+        if bit_string not in parser.evaluator:
+            raise ValueError(f"Value {value} for '{base}' is not defined in descriptors")
+        apply_bit_string(info["indices"], bit_string)
+        group_set.add(parser)
+
+    for name, groups in name_to_groups.items():
+        if name in unused_values and len(groups) > 1:
+            raise ValueError(f"Multi-bit field name '{name}' is ambiguous; use 'name:byte:bit'")
+
     for parser, info in group_info.items():
         name = info["name"]
         if name and name in unused_values:
@@ -443,12 +503,37 @@ def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
             multi_label_groups.setdefault(label, []).append(parser)
 
     for label in enabled_labels:
+        label_base, descriptor_index = _parse_label_address(label, byte_length)
+        if descriptor_index is not None:
+            descriptor = descriptors[descriptor_index]
+            if isinstance(descriptor, MultiBitValueParser):
+                parser = descriptor
+                info = group_info[parser]
+                if label_base not in info["label_to_bits"]:
+                    raise ValueError(f"Unknown label '{label_base}' for addressed multi-bit field")
+                if parser in group_set:
+                    raise ValueError(f"Multi-bit field '{label_base}' is already set")
+                label_bits = info["label_to_bits"][label_base]
+                if len(label_bits) != 1:
+                    raise ValueError(f"Label '{label_base}' is ambiguous for multi-bit encoding")
+                apply_bit_string(info["indices"], label_bits[0])
+                group_set.add(parser)
+            else:
+                if descriptor != label_base:
+                    raise ValueError(
+                        f"Label '{label_base}' does not match descriptor at byte {descriptor_index // 8} bit {7 - (descriptor_index % 8)}"
+                    )
+                bit_values[descriptor_index] = 1
+            continue
+
         has_single = label in single_label_positions and single_label_positions[label]
         has_multi = label in multi_label_groups
         if has_single and has_multi:
             raise ValueError(f"Label '{label}' is ambiguous between single and multi-bit descriptors")
 
         if has_single:
+            if len(single_label_positions[label]) > 1:
+                raise ValueError(f"Label '{label}' matches multiple bits; use 'label:byte:bit'")
             bit_index = single_label_positions[label].pop(0)
             bit_values[bit_index] = 1
             continue

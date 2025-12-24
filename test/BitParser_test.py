@@ -562,3 +562,46 @@ class TestBitParser:
                         "flag h"]
         with pytest.raises(ValueError):
             encode_bits(["flag z"], descriptors)
+
+
+    def test_encode_bits_ambiguous_single_label_requires_address(self):
+        descriptors = [ "RFU",
+                        "RFU",
+                        "flag a",
+                        "flag b",
+                        "flag c",
+                        "flag d",
+                        "flag e",
+                        "flag f"]
+        with pytest.raises(ValueError):
+            encode_bits(["RFU"], descriptors)
+
+        encoded = encode_bits(["RFU:0:7"], descriptors)
+        assert encoded == "80"
+        encoded = encode_bits(["RFU:0:6"], descriptors)
+        assert encoded == "40"
+
+
+    def test_encode_bits_addressed_multibit_value(self):
+        mode_a = MultiBitValueParser({ "00": "mode 0",
+                                       "01": "mode 1",
+                                       "10": "mode 2",
+                                       "11": "mode 3"})
+        mode_b = MultiBitValueParser({ "00": "mode 0",
+                                       "01": "mode 1",
+                                       "10": "mode 2",
+                                       "11": "mode 3"})
+        descriptors = [ mode_a,
+                        mode_a,
+                        "flag a",
+                        "flag b",
+                        mode_b,
+                        mode_b,
+                        "flag c",
+                        "flag d"]
+
+        with pytest.raises(ValueError):
+            encode_bits([], descriptors, values={"mode": 1})
+
+        encoded = encode_bits([], descriptors, values={"mode:0:7": 2, "mode:0:3": 1})
+        assert encoded == "84"

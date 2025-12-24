@@ -254,6 +254,8 @@ For multi-bit fields you must provide either:
 - a numeric value in `values` (e.g., `{"heating mode": 3}`).
 Field names for `values` are inferred from the multi-bit labels (for example: `"sensor ID"` or `"heating mode"`).
 This is handy when building web-based hex configuration generators or diagnostic calculators.
+If a label appears multiple times (like `"RFU"`), use `label:byte:bit` to disambiguate (bytes are 0-based, bit 0 is LSB).
+You can use the same `name:byte:bit` form in `values` when multiple multi-bit fields share the same name.
 
 ```python
 from BitParser import encode_bits, MultiBitValueParser, SameValueRange
@@ -311,7 +313,7 @@ pip install -U bit-parser
 - `parse_bits_full(bytes_or_hex, descriptors) -> list[dict]`  
   Returns one entry for every bit, with `enabled` markers so UIs can grey out disabled bits. For multi-bit fields, also returns a summary entry with the aggregated value.
 - `encode_bits(enabled_labels, descriptors, values=None) -> str`  
-  Returns an uppercase hex string from enabled labels and multi-bit numeric values.
+  Returns an uppercase hex string from enabled labels and multi-bit numeric values. Use `label:byte:bit` to disambiguate.
 - `describe_bits(descriptors) -> dict`  
   Returns a JSON-friendly schema for UI builders (bits plus multi-bit value options).
 
