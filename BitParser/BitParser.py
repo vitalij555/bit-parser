@@ -275,6 +275,86 @@ def _infer_multibit_name(labels):
     return sorted_candidates[0][0]
 
 
+def describe_bits(descriptors: list) -> dict:
+    bitFieldDescriptorLength = len(descriptors)
+
+    if bitFieldDescriptorLength % 8 != 0:
+        raise ValueError(f"Descriptor length ({bitFieldDescriptorLength}) is not divisible by 8!")
+
+    multibit_groups = {}
+    for index, descriptor in enumerate(descriptors):
+        if isinstance(descriptor, MultiBitValueParser):
+            multibit_groups.setdefault(descriptor, {"indices": [], "first_index": index})
+            multibit_groups[descriptor]["indices"].append(index)
+
+    group_items = sorted(multibit_groups.items(), key=lambda item: item[1]["first_index"])
+    group_info = {}
+    index_to_group = {}
+    for group_id, (parser, info) in enumerate(group_items):
+        indices = info["indices"]
+        num_bits = parser.numOfElements
+        if len(indices) != num_bits:
+            raise ValueError(
+                f"MultiBitValueParser expects {num_bits} bits but appears {len(indices)} times in descriptors"
+            )
+
+        labels = [label for _, label in parser.evaluator.items()]
+        name = _infer_multibit_name(labels)
+        values = [
+            {
+                "bits": bit_string,
+                "label": label,
+                "value_int": int(bit_string, 2),
+            }
+            for bit_string, label in parser.evaluator.items()
+        ]
+        values.sort(key=lambda entry: entry["value_int"])
+
+        group_entry = {
+            "group_id": group_id,
+            "name": name,
+            "num_bits": num_bits,
+            "descriptor_indices": indices,
+            "values": values,
+        }
+        group_info[parser] = group_entry
+        for group_bit_index, descriptor_index in enumerate(indices):
+            index_to_group[descriptor_index] = {
+                "group_id": group_id,
+                "group_bit_index": group_bit_index,
+                "group_name": name,
+            }
+
+    bits = []
+    for index, descriptor in enumerate(descriptors):
+        entry = {
+            "descriptor_index": index,
+            "byte_index": index // 8,
+            "bit_index": index % 8,
+        }
+        group = index_to_group.get(index)
+        if group:
+            entry.update({
+                "kind": "multi_bit",
+                "label": None,
+                "group_id": group["group_id"],
+                "group_bit_index": group["group_bit_index"],
+                "group_name": group["group_name"],
+            })
+        else:
+            entry.update({
+                "kind": "bit",
+                "label": descriptor,
+            })
+        bits.append(entry)
+
+    return {
+        "byte_length": bitFieldDescriptorLength // 8,
+        "bits": bits,
+        "multi_bit": [group_info[parser] for parser, _ in group_items],
+    }
+
+
 def encode_bits(enabled_labels, descriptors: list, values=None) -> str:
     bitFieldDescriptorLength = len(descriptors)
 

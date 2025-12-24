@@ -8,7 +8,7 @@ import sys
 if not '../bit-parser' in sys.path:
     sys.path.insert(1, '../bit-parser')
 
-from BitParser.BitParser import MultiBitValueParser, parse_bits, parse_bits_full, SameValueRange, parse_bits_binary, encode_bits
+from BitParser.BitParser import MultiBitValueParser, parse_bits, parse_bits_full, SameValueRange, parse_bits_binary, encode_bits, describe_bits
 
 
 @pytest.fixture(scope="class")  # scope="function" is default
@@ -415,6 +415,58 @@ class TestBitParser:
         grouped_bits = [entry for entry in parsed if entry.get("kind") == "bit" and entry.get("group_id") == summary["group_id"]]
         assert len(grouped_bits) == 2
         assert all(entry["group_label"] == "mode 2" for entry in grouped_bits)
+
+
+    def test_describe_bits_simple(self):
+        descriptors = [ "I/O pin Nr7 high level",
+                        "I/O pin Nr6 high level",
+                        "I/O pin Nr5 high level",
+                        "I/O pin Nr4 high level",
+                        "I/O pin Nr3 high level",
+                        "I/O pin Nr2 high level",
+                        "I/O pin Nr1 high level",
+                        "I/O pin Nr0 high level"]
+        schema = describe_bits(descriptors)
+        assert schema["byte_length"] == 1
+        assert len(schema["bits"]) == 8
+        assert schema["multi_bit"] == []
+        first = schema["bits"][0]
+        last = schema["bits"][7]
+        assert first["kind"] == "bit"
+        assert first["label"] == "I/O pin Nr7 high level"
+        assert first["byte_index"] == 0
+        assert first["bit_index"] == 0
+        assert last["label"] == "I/O pin Nr0 high level"
+
+
+    def test_describe_bits_multibit(self):
+        mode = MultiBitValueParser({ "00": "mode 0",
+                                     "01": "mode 1",
+                                     "10": "mode 2",
+                                     "11": "mode 3"})
+        descriptors = [ mode,
+                        mode,
+                        "flag a",
+                        "flag b",
+                        "flag c",
+                        "flag d",
+                        "flag e",
+                        "flag f"]
+        schema = describe_bits(descriptors)
+        assert schema["byte_length"] == 1
+        assert len(schema["bits"]) == 8
+        assert len(schema["multi_bit"]) == 1
+        group = schema["multi_bit"][0]
+        assert group["name"] == "mode"
+        assert group["num_bits"] == 2
+        assert group["descriptor_indices"] == [0, 1]
+        value_map = {entry["value_int"]: entry["label"] for entry in group["values"]}
+        assert value_map[2] == "mode 2"
+        first = schema["bits"][0]
+        assert first["kind"] == "multi_bit"
+        assert first["group_id"] == group["group_id"]
+        assert first["group_bit_index"] == 0
+        assert first["group_name"] == "mode"
 
 
     def test_encode_bits_simple(self):

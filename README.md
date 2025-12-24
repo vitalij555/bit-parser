@@ -17,6 +17,7 @@ Inputs can be raw bytes or hex strings like `"A3"` (no spaces).
   - [Advanced example](#advanced-example)
   - [Full list output (for UI)](#full-list-output-for-ui)
   - [Encode (reverse)](#encode-reverse)
+  - [Descriptor schema (for UI builders)](#descriptor-schema-for-ui-builders)
 - [Installation](#installation)
 - [API Overview](#api-overview)
 - [Tests](#tests)
@@ -282,6 +283,18 @@ hex_out = encode_bits(
 print(hex_out)  # "83"
 ```
 
+### Descriptor schema (for UI builders)
+
+If you want to build a UI without hardcoding the descriptor list, use `describe_bits`.
+It returns a JSON-friendly schema with per-bit entries and multi-bit value options.
+
+```python
+from BitParser import describe_bits
+
+schema = describe_bits(descriptors)
+print(schema["multi_bit"][0]["values"][0])
+```
+
 ## Installation
 
 ```
@@ -299,6 +312,8 @@ pip install -U bit-parser
   Returns one entry for every bit, with `enabled` markers so UIs can grey out disabled bits. For multi-bit fields, also returns a summary entry with the aggregated value.
 - `encode_bits(enabled_labels, descriptors, values=None) -> str`  
   Returns an uppercase hex string from enabled labels and multi-bit numeric values.
+- `describe_bits(descriptors) -> dict`  
+  Returns a JSON-friendly schema for UI builders (bits plus multi-bit value options).
 
 ### Descriptor helpers
 
